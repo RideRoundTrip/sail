@@ -13,6 +13,7 @@ module Sail
       end
 
       def from(value)
+        return ";" if value.is_a?(::Array) && value.empty?
         value.is_a?(::String) ? value : value.join(Sail.configuration.array_separator)
       end
     end

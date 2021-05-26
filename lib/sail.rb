@@ -50,7 +50,7 @@ module Sail # :nodoc:
     #
     # Sail.set(:boolean_setting, true)
     #
-    def set(name, value)
+    def set(name, value = nil)
       Sail::Setting.set(name, value)
     end
 

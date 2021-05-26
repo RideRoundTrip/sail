@@ -1,7 +1,7 @@
 class CreateSailProfiles < ActiveRecord::Migration<%= migration_version %>
   def change
     create_table :sail_entries do |t|
-      t.string :value, null: false
+      t.string :value
       t.references :setting, index: true
       t.references :profile, index: true
       t.timestamps

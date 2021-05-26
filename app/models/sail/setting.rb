@@ -17,18 +17,18 @@ module Sail
     has_many :entries, dependent: :destroy
     attr_reader :caster
 
-    validates :value, :cast_type, presence: true
+    validates :cast_type, presence: true
     validates :name, presence: true, uniqueness: { case_sensitive: false }
     enum cast_type: %i[integer string boolean range array float
                        ab_test cron obj_model date uri throttle
                        locales set].freeze
 
-    validate :value_is_within_range, if: -> { range? }
-    validate :value_is_true_or_false, if: -> { boolean? || ab_test? }
-    validate :cron_is_valid, if: -> { cron? }
-    validate :model_exists, if: -> { obj_model? }
-    validate :date_is_valid, if: -> { date? }
-    validate :uri_is_valid, if: -> { uri? }
+    validate :value_is_within_range, if: -> { value.present? && range? }
+    validate :value_is_true_or_false, if: -> { value.present? && (boolean? || ab_test?) }
+    validate :cron_is_valid, if: -> { value.present? && cron? }
+    validate :model_exists, if: -> { value.present? && obj_model? }
+    validate :date_is_valid, if: -> { value.present? && date? }
+    validate :uri_is_valid, if: -> { value.present? && uri? }
 
     after_initialize :instantiate_caster
 
@@ -62,7 +62,7 @@ module Sail
       setting = Setting.for_value_by_name(name).first
       return if setting.nil?
 
-      setting_value = setting.safe_cast
+      setting_value = setting.safe_cast unless setting.value.nil?
 
       unless setting.should_not_cache?
         Rails.cache.write(
@@ -70,13 +70,15 @@ module Sail
           expires_in: Sail.configuration.cache_life_span
         )
       end
-
+      
       setting_value
     end
 
-    def self.set(name, value)
-      setting = Setting.find_by(name: name)
-      value_cast = setting.caster.from(value)
+    def self.set(name, value = nil)
+      setting = Setting.find_by(name: name) 
+      if value.present? || setting.boolean? || setting.ab_test? || value.is_a?(Array)
+        value_cast = setting.caster.from(value)
+      end
       success = setting.update(value: value_cast)
       Rails.cache.delete("setting_get_#{name}") if success
       [setting, success]
@@ -93,8 +95,8 @@ module Sail
 
     def self.reset(name)
       if File.exist?(config_file_path)
-        defaults = YAML.load_file(config_file_path)
-        set(name, defaults[name]["value"])
+        defaults = YAML.load_file(config_file_path)   
+        set(name, defaults[name.to_s]["value"])  
       end
     end
 
@@ -121,7 +123,7 @@ module Sail
     def self.find_or_create_settings(config)
       config.each do |name, attrs|
         string_attrs = attrs.merge(name: name)
-        string_attrs.update(string_attrs) { |_, v| v.to_s }
+        string_attrs.update(string_attrs) { |_, v| v.to_s unless v.nil? }
         where(name: name).first_or_create(string_attrs)
       end
     end
